@@ -7,7 +7,15 @@ Reçoit la photo d'un repas depuis l'application, vérifie le jeton Firebase de 
 - Plafonds (par jour UTC) : 30 photos par utilisateur et 500 au total, réglables dans `wrangler.toml`. Ce plafond global est un garde-fou grossier : le coût réel d'une photo dépend du modèle qui répond (Gemini, principal, secours) et de la longueur de la réponse ; il est à recalculer avec l'usage journalisé (voir plus bas). L'unité est prise avant l'appel au modèle et rendue si aucune réponse exploitable n'est produite (panne, réponse illisible, délai dépassé). Quand le quota de neurones de Workers AI est épuisé, le relais répond 429 `{"erreur":"quota","raison":"service"}` plutôt qu'une panne. KV n'étant pas atomique, une rafale de N requêtes simultanées peut dépasser un plafond de N-1.
 - Délais : 15 s au plus pour Gemini, 35 s au total pour une analyse (l'application abandonne à 45 s) ; le modèle de secours n'est pas lancé s'il reste moins de 12 s. Une réponse de Gemini coupée (`finishReason` autre que `STOP`, par exemple `MAX_TOKENS`) est refusée et le relais passe au modèle suivant ; la réflexion de Gemini est limitée (`thinkingConfig`).
 - Valeurs nutritionnelles : l'IA reconnaît les aliments et estime les grammes. Quand un aliment est reconnu sans ambiguïté dans une table et que la densité calorique de l'IA s'en écarte de plus de 25 %, le relais garde les grammes et reprend les apports de la table : d'abord quelques aliments courants (`src/referentiel.js`), puis la table Ciqual 2020 de l'ANSES (`donnees/ciqual.json`, 3 092 aliments, rapprochement prudent dans `src/ciqual.js`). Le libellé Ciqual retenu est renvoyé dans `reference`. Jamais pour des valeurs lues sur une étiquette (`source: "etiquette"`) ni pour un produit à la recette particulière (protéiné, allégé...). Le fichier se régénère avec `outils/convertir_ciqual.cjs`.
-- Le modèle est interchangeable (`MODELE`) : Llama 3.2 11B Vision par défaut ; si sa réponse est illisible (texte libre au lieu de JSON, constaté sur des photos de test) ou en panne, `MODELE_SECOURS` (Llama 4 Scout 17B) prend le relais. Le format de l'entrée est dans `src/analyse.js` (`entreeModele`).
+- Le modèle est interchangeable (`MODELE`) : Mistral Small 3.1 par défaut ; si sa réponse est illisible ou s'il est en panne, `MODELE_SECOURS` (Llama 4 Scout 17B) prend le relais. Choix fait sur mesure, pas sur réputation :
+
+  | Modèle (20 plats pesés, Nutrition5k) | Réponses lisibles | Erreur médiane sur les calories | Plats à ±20 % | Erreur médiane sur le poids | Durée |
+  |---|---|---|---|---|---|
+  | Mistral Small 3.1 24B | 20/20 | 20 % | 55 % | 22 % | 9 s |
+  | Llama 4 Scout 17B | 20/20 | 30 % | 20 % | 29 % | 6 s |
+  | Llama 3.2 11B Vision (ancien choix) | 17/20 | 39 % | 12 % | 63 % | 16 s |
+
+  Essai écarté : ajouter à la consigne la méthode d'estimation des quantités donnée à Gemini a dégradé Mistral (26 % d'erreur, 40 % des plats à ±20 %) ; elle reste réservée à Gemini. Les modèles plus récents du catalogue (GLM 5.3, DeepSeek V4.1...) demandent l'offre payante de Workers AI. Limite de la mesure : des plats de cantine américaine photographiés de dessus ; à refaire sur des repas pesés à la maison. Le format de l'entrée est dans `src/analyse.js` (`entreeModele`).
 
 ## Journal d'usage
 
@@ -59,7 +67,7 @@ cd relais
 node eval/comparer.js ./photos
 ```
 
-Le script lance un petit worker d'évaluation (`wrangler dev --remote`, quota gratuit de Workers AI, ni jeton ni plafond) et compare Llama 3.2 11B, Llama 4 Scout et Mistral Small 3.1 ; Gemini s'ajoute si `GEMINI_API_KEY` est défini dans l'environnement. Il affiche, par modèle : la part de réponses lisibles, l'erreur médiane sur les calories, la part des repas à ±20 %, l'erreur sur le poids, la part des repas dont le poids pesé tombe dans la fourchette annoncée, et la durée moyenne. Pour tester d'autres modèles : `node eval/comparer.js ./photos "@cf/meta/llama-4-scout-17b-16e-instruct,gemini"`.
+Le script lance un petit worker d'évaluation (`wrangler dev` avec la liaison AI distante, quota gratuit de Workers AI, ni jeton ni plafond) et compare Llama 3.2 11B, Llama 4 Scout et Mistral Small 3.1 ; Gemini s'ajoute si `GEMINI_API_KEY` est défini dans l'environnement. Il affiche, par modèle : la part de réponses lisibles, l'erreur médiane sur les calories, la part des repas à ±20 %, l'erreur sur le poids, la part des repas dont le poids pesé tombe dans la fourchette annoncée, et la durée moyenne. Pour tester d'autres modèles : `node eval/comparer.js ./photos "@cf/meta/llama-4-scout-17b-16e-instruct,gemini"`.
 
 `evaluer.js` mesure, lui, le relais déployé (`RELAIS_URL` et `JETON` Firebase), tel que l'application l'appelle.
 

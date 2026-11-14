@@ -29,7 +29,11 @@ async function verifierSignature(jeton, cles) {
   const charge = lireJson(parties[1]);
   if (entete.alg !== 'RS256' || !entete.kid) throw new JetonInvalide('algorithme');
 
-  const jwk = (await cles()).keys.find((k) => k.kid === entete.kid);
+  const chercher = (jeu) => jeu.keys.find((k) => k.kid === entete.kid);
+  // Clé absente du jeu gardé en mémoire : Google vient peut-être d'en publier
+  // une nouvelle. On recharge une fois avant de refuser, sinon un jeton
+  // valide serait rejeté jusqu'à l'expiration du cache (une heure).
+  const jwk = chercher(await cles()) ?? chercher(await cles({ forcer: true }));
   if (!jwk) throw new JetonInvalide('clé inconnue');
   const cle = await crypto.subtle.importKey(
     'jwk',
@@ -87,23 +91,33 @@ export async function verifierAppCheck(
   return charge.sub;
 }
 
-let cache = { at: 0, valeur: null };
-let cacheAppCheck = { at: 0, valeur: null };
+/** Durée de vie d'un jeu de clés publiques en mémoire. */
+const DUREE_CACHE = 3_600_000;
+/**
+ * Écart minimal entre deux rechargements forcés : sans lui, des jetons au
+ * `kid` inventé feraient interroger Google à chaque requête.
+ */
+export const ECART_RECHARGEMENT = 60_000;
 
-/** Clés publiques d'App Check, gardées une heure. */
-export async function clesAppCheck(fetcher = fetch) {
-  if (cacheAppCheck.valeur && Date.now() - cacheAppCheck.at < 3_600_000) return cacheAppCheck.valeur;
-  const r = await fetcher(URL_CLES_APP_CHECK);
-  if (!r.ok) throw new Error('clés App Check indisponibles');
-  cacheAppCheck = { at: Date.now(), valeur: await r.json() };
-  return cacheAppCheck.valeur;
+/**
+ * Lecteur d'un jeu de clés publiques (JWKS), gardé une heure. `forcer`
+ * recharge avant l'échéance, au plus une fois par minute.
+ * @returns {(options?: {forcer?: boolean, fetcher?: typeof fetch, maintenant?: number}) => Promise<{keys: object[]}>}
+ */
+export function lecteurCles(url, messageErreur) {
+  let cache = { at: 0, valeur: null };
+  return async ({ forcer = false, fetcher = fetch, maintenant = Date.now() } = {}) => {
+    const age = maintenant - cache.at;
+    if (cache.valeur && age < (forcer ? ECART_RECHARGEMENT : DUREE_CACHE)) return cache.valeur;
+    const r = await fetcher(url);
+    if (!r.ok) throw new Error(messageErreur);
+    cache = { at: maintenant, valeur: await r.json() };
+    return cache.valeur;
+  };
 }
 
-/** Clés publiques de Google, gardées une heure. */
-export async function clesGoogle(fetcher = fetch) {
-  if (cache.valeur && Date.now() - cache.at < 3_600_000) return cache.valeur;
-  const r = await fetcher(URL_CLES);
-  if (!r.ok) throw new Error('clés indisponibles');
-  cache = { at: Date.now(), valeur: await r.json() };
-  return cache.valeur;
-}
+/** Clés publiques d'App Check. */
+export const clesAppCheck = lecteurCles(URL_CLES_APP_CHECK, 'clés App Check indisponibles');
+
+/** Clés publiques de Google (jetons d'identité Firebase). */
+export const clesGoogle = lecteurCles(URL_CLES, 'clés indisponibles');

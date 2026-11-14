@@ -12,8 +12,13 @@ id = "ca1b497c69f844df9fe098c9d5e66c4a"
 
 [vars]
 PROJECT_ID = "coach-jonathanmx5"
-MODELE = "@cf/meta/llama-3.2-11b-vision-instruct"
-# Si le modèle principal ne renvoie rien d'exploitable (texte libre au lieu de JSON).
+# Choisi sur mesure (eval/comparer.js, 20 plats pesés de Nutrition5k, novembre
+# 2026) : Mistral Small 3.1 se trompe de 20 % sur les calories (médiane), 55 %
+# des plats à ±20 %, toutes les réponses lisibles, 9 s. Llama 3.2 11B, le
+# modèle précédent : 39 %, 12 %, 3 réponses illisibles sur 20, 16 s.
+MODELE = "@cf/mistralai/mistral-small-3.1-24b-instruct"
+# Si le modèle principal ne renvoie rien d'exploitable ou tombe en panne.
+# Llama 4 Scout : 30 % d'erreur, toutes les réponses lisibles, 6 s.
 MODELE_SECOURS = "@cf/meta/llama-4-scout-17b-16e-instruct"
 # Photos analysées par jour : par utilisateur, et pour tout le monde (garde-fou
 # grossier du coût ; à recalculer avec l'usage journalisé par requête).

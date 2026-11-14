@@ -24,4 +24,33 @@ void main() {
     expect(coupe, 'abc…');
     expect(coupe.length, lessThanOrEqualTo(5));
   });
+
+  group('joursEntre', () {
+    test('compte les jours calendaires, dans les deux sens', () {
+      expect(joursEntre(DateTime(2026, 1, 1), DateTime(2026, 1, 1)), 0);
+      expect(joursEntre(DateTime(2026, 1, 1), DateTime(2026, 1, 8)), 7);
+      expect(joursEntre(DateTime(2026, 1, 8), DateTime(2026, 1, 1)), -7);
+      expect(joursEntre(DateTime(2024), DateTime(2025)), 366);
+    });
+
+    test("l'heure de la journée ne compte pas", () {
+      expect(
+        joursEntre(DateTime(2026, 1, 1, 23, 59), DateTime(2026, 1, 2, 0, 1)),
+        1,
+      );
+      expect(
+        joursEntre(DateTime(2026, 1, 1, 0, 1), DateTime(2026, 1, 1, 23)),
+        0,
+      );
+    });
+
+    test("le passage à l'heure d'été ne fait pas perdre un jour", () {
+      // Le 29 mars 2026, la France avance d'une heure : de minuit à minuit,
+      // 23 heures seulement. `difference().inDays` rendrait 6 et 818.
+      expect(joursEntre(DateTime(2026, 3, 23), DateTime(2026, 3, 30)), 7);
+      expect(joursEntre(DateTime(2024), DateTime(2026, 3, 30)), 819);
+      // Et le passage à l'heure d'hiver (25 octobre 2026) n'en ajoute pas.
+      expect(joursEntre(DateTime(2026, 10, 19), DateTime(2026, 10, 26)), 7);
+    });
+  });
 }

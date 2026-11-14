@@ -209,25 +209,24 @@ void main() {
   );
 
   test(
-    "repli : un relais qui ne lit pas le multipart reçoit l'image seule",
+    'photo illisible avec une précision : un seul envoi, pas de second essai',
     () async {
       final vues = <http.Request>[];
       final c = client((r) async {
         vues.add(r);
-        final multipart = r.headers['content-type']!.startsWith('multipart');
-        return multipart
-            ? json({'erreur': 'illisible'}, 422)
-            : json({
-                'aliments': [
-                  {'nom': 'Riz', 'grammes': 100, 'kcal': 130},
-                ],
-              });
+        return json({'erreur': 'illisible'}, 422);
       });
-      final r = await c.analyser(image, indice: 'riz complet');
-      expect(r.aliments.single.nom, 'Riz');
-      expect(vues, hasLength(2));
-      expect(vues[1].url.query, isEmpty);
-      expect(vues[1].bodyBytes, [1, 2, 3]);
+      await expectLater(
+        c.analyser(image, indice: 'riz complet'),
+        throwsA(
+          isA<AnalyseEchouee>().having(
+            (e) => e.cause,
+            'cause',
+            CauseAnalyse.illisible,
+          ),
+        ),
+      );
+      expect(vues, hasLength(1));
     },
   );
 

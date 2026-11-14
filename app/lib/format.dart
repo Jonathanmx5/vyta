@@ -17,3 +17,15 @@ String tronquer(String texte, int max) {
   if (dernier >= 0xD800 && dernier <= 0xDBFF) fin--;
   return '${texte.substring(0, fin)}…';
 }
+
+/// Nombre de jours calendaires de [debut] à [fin] (négatif si [fin] précède).
+///
+/// `fin.difference(debut).inDays` se trompe d'un jour quand un passage à
+/// l'heure d'été sépare les deux dates : de minuit à minuit il ne s'écoule
+/// alors que 23 heures, et `inDays` arrondit vers le bas. On compare donc les
+/// dates en UTC, où tous les jours font 24 heures.
+int joursEntre(DateTime debut, DateTime fin) => DateTime.utc(
+  fin.year,
+  fin.month,
+  fin.day,
+).difference(DateTime.utc(debut.year, debut.month, debut.day)).inDays;

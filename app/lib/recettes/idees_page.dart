@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../compte/auth_service.dart';
+import '../format.dart';
 import '../journal/formulaires.dart';
 import '../journal/modele.dart';
 import '../l10n/app_localizations.dart';
@@ -50,7 +51,7 @@ class _IdeesPageState extends State<IdeesPage> {
   Map<String, Avis> _avis = const {};
 
   int get _graine =>
-      widget.horloge().difference(DateTime(2024)).inDays * 31 + _melange;
+      joursEntre(DateTime(2024), widget.horloge()) * 31 + _melange;
 
   void _reconstruire() {
     _deck = construireDeck(

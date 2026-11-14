@@ -631,7 +631,7 @@ class _Courbe extends StatelessWidget {
     final textes = Theme.of(context).textTheme;
     final accent = context.palette.accent;
     final g = grilleCourbe(
-      jours: aujourdhui.difference(debut).inDays,
+      jours: joursEntre(debut, aujourdhui),
       poids: [for (final p in pesees) p.kg, ...?projection],
       avecProjection: projection != null,
     );
@@ -746,9 +746,7 @@ class _Courbe extends StatelessWidget {
                                   FlSpot(_x(depart!.date), depart!.kg),
                                   for (var i = 0; i < projection!.length; i++)
                                     FlSpot(
-                                      aujourdhui.difference(debut).inDays +
-                                          i +
-                                          1.0,
+                                      joursEntre(debut, aujourdhui) + i + 1.0,
                                       projection![i],
                                     ),
                                 ],

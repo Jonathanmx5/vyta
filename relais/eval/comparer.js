@@ -5,9 +5,9 @@
 // Dossier : x.jpg + x.json  {"kcal": 650, "grammes": 480}  (grammes facultatif :
 // poids total pesé du repas). Les modèles par défaut sont ceux de Workers AI ;
 // « gemini » s'ajoute si GEMINI_API_KEY est défini dans l'environnement.
-// Le worker d'évaluation est lancé en local (wrangler dev --remote) : il utilise
+// Le worker d'évaluation est lancé en local (wrangler dev, liaison AI distante) : il utilise
 // le quota gratuit de Workers AI, sans jeton ni plafond.
-import { spawn } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import { readdirSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -36,7 +36,7 @@ if (photos.length === 0) {
   process.exit(1);
 }
 
-const args = ['wrangler', 'dev', '--remote', '-c', join(ici, 'wrangler.toml'), '--port', '8799'];
+const args = ['wrangler', 'dev', '-c', join(ici, 'wrangler.toml'), '--port', '8799'];
 if (process.env.GEMINI_API_KEY) args.push('--var', `GEMINI_API_KEY:${process.env.GEMINI_API_KEY}`);
 const serveur = spawn('npx', args, { shell: true, stdio: ['ignore', 'pipe', 'pipe'] });
 await new Promise((ok, ko) => {
@@ -77,18 +77,26 @@ try {
             dansFourchette: p.ref.grammes ? dansLaFourchette(aliments, p.ref.grammes) : undefined,
           };
         } else {
-          ligne = { ok: false, ms: Date.now() - t0 };
+          // La cause (erreur du modèle, ou réponse sans aliment exploitable)
+          // distingue un modèle qui ne lit pas l'image d'une panne.
+          ligne = { ok: false, ms: Date.now() - t0, cause: j.erreur ?? 'réponse sans aliment' };
         }
-      } catch {
-        ligne = { ok: false, ms: Date.now() - t0 };
+      } catch (e) {
+        ligne = { ok: false, ms: Date.now() - t0, cause: e?.name === 'TimeoutError' ? 'délai dépassé' : String(e) };
       }
       parModele[m].push(ligne);
-      console.log(`${m.split('/').pop()} · ${p.nom} : ${ligne.ok ? `${ligne.kcalEstime} kcal (réf. ${p.ref.kcal})` : 'illisible'}`);
+      console.log(`${m.split('/').pop()} · ${p.nom} : ${ligne.ok ? `${ligne.kcalEstime} kcal (réf. ${p.ref.kcal})` : `illisible (${String(ligne.cause).slice(0, 140)})`}`);
     }
   }
 } finally {
-  serveur.kill();
-  spawn('taskkill', ['/F', '/T', '/PID', String(serveur.pid)], { shell: true, stdio: 'ignore' });
+  // Sous Windows, kill() n'arrête que l'interpréteur de commandes : wrangler et
+  // son runtime survivraient et répondraient, sur le même port, à la place du
+  // serveur de la comparaison suivante. On attend donc la fin de l'arbre entier.
+  if (process.platform === 'win32') {
+    spawnSync('taskkill', ['/F', '/T', '/PID', String(serveur.pid)], { stdio: 'ignore' });
+  } else {
+    serveur.kill();
+  }
 }
 
 console.log(`\n=== Résumé (${photos.length} photos) ===`);
@@ -107,3 +115,7 @@ for (const [m, essais] of Object.entries(parModele)) {
     ].join(' | '),
   );
 }
+
+// Les flux du serveur arrêté gardent le processus en vie : on sort franchement,
+// sinon le script reste bloqué après son résumé.
+process.exit(0);

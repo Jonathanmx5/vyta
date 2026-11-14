@@ -2,5 +2,8 @@ name = "coach-eval"
 main = "worker.js"
 compatibility_date = "2026-01-01"
 
+# Workers AI n'existe pas en local : la liaison passe par le compte Cloudflare
+# (remplace `wrangler dev --remote`, abandonné, dont le runtime plantait).
 [ai]
 binding = "AI"
+remote = true

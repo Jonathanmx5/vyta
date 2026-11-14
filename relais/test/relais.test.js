@@ -694,3 +694,39 @@ test('relais : une réponse sans aucune calorie donne 422 (illisible)', async ()
   assert.equal(r.status, 422);
   assert.equal((await r.json()).erreur, 'illisible');
 });
+
+test('clés publiques : gardées une heure, rechargées pour une clé inconnue, au plus une fois par minute', async () => {
+  const { lecteurCles, ECART_RECHARGEMENT } = await import('../src/jeton.js');
+  let appels = 0;
+  const fetcher = async () => {
+    appels++;
+    return { ok: true, json: async () => ({ keys: [{ kid: `k${appels}` }] }) };
+  };
+  const lire = lecteurCles('https://exemple.invalid/jwks', 'indisponible');
+  const t0 = 1_000_000;
+  assert.equal((await lire({ fetcher, maintenant: t0 })).keys[0].kid, 'k1');
+  // Dans l'heure : le cache, sans nouvel appel.
+  assert.equal((await lire({ fetcher, maintenant: t0 + 3_000_000 })).keys[0].kid, 'k1');
+  assert.equal(appels, 1);
+  // Rechargement forcé trop tôt après le dernier : toujours le cache.
+  assert.equal((await lire({ forcer: true, fetcher, maintenant: t0 + ECART_RECHARGEMENT - 1 })).keys[0].kid, 'k1');
+  assert.equal(appels, 1);
+  // Passé une minute, le rechargement forcé va chercher les nouvelles clés.
+  assert.equal((await lire({ forcer: true, fetcher, maintenant: t0 + ECART_RECHARGEMENT })).keys[0].kid, 'k2');
+  assert.equal(appels, 2);
+  // Passé une heure, rechargement ordinaire.
+  assert.equal((await lire({ fetcher, maintenant: t0 + ECART_RECHARGEMENT + 3_600_000 })).keys[0].kid, 'k3');
+});
+
+test("jeton signé par une clé publiée après la mise en cache : accepté après rechargement", async () => {
+  const { cles, jeton } = await fabrique();
+  let forces = 0;
+  const jeu = await cles();
+  // Le cache ne connaît pas encore la clé ; le rechargement forcé la trouve.
+  const lecteur = async ({ forcer = false } = {}) => {
+    if (forcer) forces++;
+    return forcer ? jeu : { keys: [] };
+  };
+  assert.equal(await verifier(await jeton(), lecteur), 'u1');
+  assert.equal(forces, 1);
+});

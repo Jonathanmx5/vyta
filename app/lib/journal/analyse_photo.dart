@@ -234,14 +234,10 @@ class AnalysePhotoRelais implements AnalysePhoto {
         'x-firebase-appcheck': preuveAppCheck,
     };
     final precision = indice?.trim() ?? '';
-    var r = await _envoyer(jpeg, precision, entetes);
-    // Repli tant que le relais n'accepte pas le multipart : l'ancien relais
-    // lit tout le corps comme une image et échoue. On renvoie alors la photo
-    // seule, sans la précision. À retirer une fois le relais à jour.
-    if (precision.isNotEmpty &&
-        const {400, 415, 422, 502}.contains(r.statusCode)) {
-      r = await _envoyer(jpeg, '', entetes);
-    }
+    // Une seule tentative : le relais lit le multipart depuis octobre 2026.
+    // Renvoyer la photo sans la précision après un refus doublait l'attente
+    // (jusqu'à 90 s) pour une photo de toute façon illisible.
+    final r = await _envoyer(jpeg, precision, entetes);
     switch (r.statusCode) {
       case 200:
         break;

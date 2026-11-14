@@ -2,6 +2,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
 
+import '../format.dart';
 import '../journal/modele.dart';
 import 'avis.dart';
 import 'catalogue.dart';
@@ -151,7 +152,7 @@ Planning genererPlanning({
   Set<String> coches = const {},
   Map<String, Avis> avis = const {},
 }) {
-  final graine = lundi.difference(DateTime(2024)).inDays ~/ 7;
+  final graine = joursEntre(DateTime(2024), lundi) ~/ 7;
   final jours = <int, Map<Moment, RepasPlanifie>>{};
   for (var j = 0; j < 7; j++) {
     final repas = <Moment, RepasPlanifie>{};
